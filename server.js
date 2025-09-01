@@ -31,6 +31,8 @@ connectDB();
 app.get("/", (req, res) => {
   res.send("Backend API is running 🚀");
 });
+
+// Testimonials API Route
 app.use("/arts/feedback", feedbackRoutes);
 
 // Start Server
