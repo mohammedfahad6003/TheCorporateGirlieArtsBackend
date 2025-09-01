@@ -2,23 +2,24 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
-const mongoSanitize = require("express-mongo-sanitize");
+const compression = require("compression");
 const connectDB = require("./config/db");
 
-const itemRoutes = require("./routes/itemRoutes");
+const feedbackRoutes = require("./routes/testimonalRoutes");
 
 const app = express();
 
 // Security Middlewares
-app.use(helmet()); // Protects against common vulnerabilities by setting HTTP headers
-app.use(mongoSanitize()); // Prevents MongoDB injection attacks
+app.use(helmet());
+app.use(compression());
 
-// CORS (restrict only to your frontend)
-app.use(cors({
-  origin: "http://localhost:3000", // React frontend (change if deployed)
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  credentials: true
-}));
+// CORS
+app.use(
+  cors({
+    origin: ["http://localhost:2330", "https://thecorporategirliearts.netlify.app/"],
+    methods: ["GET", "POST", "PUT", "DELETE"]
+  })
+);
 
 // Body parser
 app.use(express.json());
@@ -27,11 +28,10 @@ app.use(express.json());
 connectDB();
 
 // Routes
-app.use("/api/items", itemRoutes);
-
 app.get("/", (req, res) => {
   res.send("Backend API is running 🚀");
 });
+app.use("/arts/feedback", feedbackRoutes);
 
 // Start Server
 const PORT = process.env.PORT || 5000;
