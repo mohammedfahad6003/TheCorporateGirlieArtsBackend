@@ -3,19 +3,23 @@ const router = express.Router();
 const Discount = require("../models/discountModel");
 const guestTokenMiddleware = require("../middleware/guestToken");
 
-// Apply guestToken middleware to all routes
 router.use(guestTokenMiddleware);
 
-// ✅ Fetch all active discounts
 router.get("/", async (req, res) => {
   try {
     const discounts = await Discount.find({ isActive: true });
-    res.json({
+
+    return res.status(200).json({
+      status: 200,
       guestToken: req.guestToken,
       discounts,
+      message: "Active discounts fetched successfully",
     });
   } catch (err) {
-    res.status(500).json({ message: "Server error fetching discounts" });
+    return res.status(500).json({
+      status: 500,
+      message: "Server error while fetching discounts",
+    });
   }
 });
 
@@ -24,28 +28,33 @@ router.post("/validate", async (req, res) => {
   const { code } = req.body;
 
   try {
-    const discount = await Discount.findOne({ code, isActive: true });
+    const discount = await Discount.findOne({
+      code: new RegExp(`^${code}$`, "i"),
+      isActive: true,
+    });
 
     if (!discount) {
-      return res
-        .status(400)
-        .json({ valid: false, message: "Invalid or Inactive Discount code" });
+      return res.status(400).json({
+        status: 400,
+        data: { valid: false, message: "Invalid or Inactive Discount code" },
+      });
     }
 
-    // If valid
-    return res.json({
-      valid: true,
-      guestToken: req.guestToken,
-      discount: {
-        code: discount.code,
-        discountPercent: discount.discountPercent,
+    return res.status(200).json({
+      status: 200,
+      data: {
+        valid: true,
+        discount: {
+          code: discount.code,
+          discountPercent: discount.discountPercent,
+        },
+        message: "Discount code is valid",
       },
-      message: "Discount code is valid",
     });
   } catch (err) {
-    res.status(500).json({
-      valid: false,
-      message: "Server error while validating discount",
+    return res.status(500).json({
+      status: 500,
+      data: { valid: false, message: "Server error while validating discount" },
     });
   }
 });
