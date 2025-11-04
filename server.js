@@ -8,6 +8,7 @@ const connectDB = require("./config/db");
 
 const feedbackRoutes = require("./routes/testimonalRoutes");
 const discountRoutes = require("./routes/discountRoutes");
+const productRoutes = require("./routes/productRoutes");
 
 const app = express();
 
@@ -62,6 +63,7 @@ app.get("/", (req, res) => {
 
 app.use("/arts/feedback", feedbackRoutes);
 app.use("/arts/discounts", discountRoutes);
+app.use("/arts/products", productRoutes);
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () =>
