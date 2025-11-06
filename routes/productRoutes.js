@@ -94,11 +94,13 @@ router.get("/", async (req, res) => {
     };
 
     return res.status(200).json({
-      status: 200,
-      guestToken: req.guestToken,
-      pagination,
-      data: products,
-      message: "Products fetched successfully",
+      data: {
+        status: 200,
+        guestToken: req.guestToken,
+        pagination,
+        data: products,
+        message: "Products fetched successfully",
+      },
     });
   } catch (err) {
     console.error("Error fetching products:", err);
