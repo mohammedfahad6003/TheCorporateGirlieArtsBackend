@@ -55,7 +55,7 @@ router.get("/", async (req, res) => {
 
     // 🟢 Availability filter
     if (available !== undefined) {
-      filter.available = available === "true";
+      filter.isAvailable = available === "true";
     }
 
     // 🧭 Sorting logic
