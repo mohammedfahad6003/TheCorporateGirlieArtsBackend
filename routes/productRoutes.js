@@ -28,17 +28,22 @@ router.get("/", async (req, res) => {
       max,
       sort,
       page = 1,
-      limit = 10,
+      limit,
     } = req.query;
 
     const filter = {};
 
-    // 🎨 Category filter
+    // 🎨 Category filter (supports single or multiple)
     if (category) {
-      filter.category = new RegExp(`^${category}$`, "i");
+      const categories = Array.isArray(category)
+        ? category
+        : category.split(",");
+      filter.category = {
+        $in: categories.map((c) => new RegExp(`^${c}$`, "i")),
+      };
     }
 
-    // 🔤 Title filter (LIKE / case-insensitive)
+    // 🔤 Title filter (case-insensitive search)
     if (title) {
       filter.title = { $regex: title, $options: "i" };
     }
@@ -53,7 +58,7 @@ router.get("/", async (req, res) => {
       filter.available = available === "true";
     }
 
-    // 🧮 Build base query
+    // 🧭 Sorting logic
     let query = Product.find(filter);
 
     // 🧭 Sorting logic
@@ -76,21 +81,22 @@ router.get("/", async (req, res) => {
       }
     }
 
-    // 📄 Pagination
-    const skip = (Number(page) - 1) * Number(limit);
-    query = query.skip(skip).limit(Number(limit));
-
-    // 🔢 Total count (for frontend pagination)
+    // 🔢 Total count for frontend
     const totalCount = await Product.countDocuments(filter);
 
-    // 🧾 Execute final query
+    // 📄 Optional pagination
+    if (limit) {
+      const skip = (Number(page) - 1) * Number(limit);
+      query = query.skip(skip).limit(Number(limit));
+    }
+
     const products = await query;
 
     const pagination = {
       totalItems: totalCount,
       currentPage: Number(page),
-      totalPages: Math.ceil(totalCount / Number(limit)),
-      pageSize: Number(limit),
+      pageSize: limit ? Number(limit) : totalCount,
+      totalPages: limit ? Math.ceil(totalCount / Number(limit)) : 1,
     };
 
     return res.status(200).json({
