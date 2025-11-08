@@ -17,7 +17,7 @@ const productSchema = new mongoose.Schema(
     category: {
       type: String,
       required: true,
-      enum: ["Resin", "Painting", "Home Decor", "Crafts"],
+      enum: ["resin", "painting", "home decor", "crafts"],
     },
     description: { type: String },
     isAvailable: { type: Boolean, default: true },
