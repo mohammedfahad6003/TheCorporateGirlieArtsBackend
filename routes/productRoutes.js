@@ -79,6 +79,9 @@ router.get("/", async (req, res) => {
         default:
           break;
       }
+    } else {
+      // Default sort — to maintain consistent ordering
+      query = query.sort({ productId: 1 });
     }
 
     // 🔢 Total count for frontend
