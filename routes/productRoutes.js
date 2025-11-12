@@ -120,19 +120,29 @@ router.get("/", async (req, res) => {
 // ✅ Get a single product by ID
 router.get("/:id", async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id);
-    if (!product)
-      return res
-        .status(404)
-        .json({ status: 404, message: "Product not found" });
+    const product = await Product.findOne({ productId: req.params.id });
+
+    if (!product) {
+      return res.status(404).json({
+        data: {
+          status: 404,
+          message: "Product not found",
+        },
+      });
+    }
 
     return res.status(200).json({
-      status: 200,
-      data: product,
-      message: "Product fetched successfully",
+      data: {
+        status: 200,
+        data: product,
+        message: "Product fetched successfully",
+      },
     });
   } catch (err) {
-    return res.status(500).json({ status: 500, message: "Server error" });
+    return res.status(500).json({
+      status: 500,
+      message: "Server error",
+    });
   }
 });
 
