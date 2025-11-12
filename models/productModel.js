@@ -20,6 +20,7 @@ const productSchema = new mongoose.Schema(
       type: String,
       required: true,
       enum: ["resin", "painting", "home decor", "crafts"],
+      lowercase: true,
     },
     description: { type: String },
     isAvailable: { type: Boolean, default: true },
