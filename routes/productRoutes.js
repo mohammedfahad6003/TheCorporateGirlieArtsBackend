@@ -15,6 +15,7 @@ router.use(guestTokenMiddleware);
  * - min, max (price range)
  * - sort (best-selling | low-to-high | high-to-low | newest)
  * - pagination (page, limit)
+ * - type (string)
  *
  * Example:
  * /arts/products?category=Painting&title=classic&available=true&min=1000&max=6000&sort=low-to-high&page=1&limit=10
@@ -76,6 +77,7 @@ router.get("/", async (req, res) => {
       category,
       title,
       available,
+      type,
       min,
       max,
       sort,
@@ -97,12 +99,15 @@ router.get("/", async (req, res) => {
 
     // 🔤 Title filter (case-insensitive search)
     if (title) {
-      const regex = new RegExp(title, "i");
+      filter.title = { $regex: title, $options: "i" };
+    }
 
-      filter.$or = [
-        { title: { $regex: regex } },
-        { category: { $regex: regex } },
-      ];
+    // 🎨 Type filter (supports single or multiple)
+    if (type) {
+      const types = Array.isArray(type) ? type : type.split(",");
+      filter.type = {
+        $in: types.map((t) => new RegExp(`^${t}$`, "i")),
+      };
     }
 
     // 💰 Price range filter
