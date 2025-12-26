@@ -2,30 +2,18 @@ const express = require("express");
 const router = express.Router();
 const Product = require("../models/productModel");
 const guestTokenMiddleware = require("../middleware/guestToken");
+const adminAuth = require("../middleware/adminAuth");
 const { body, validationResult } = require("express-validator");
 
 router.use(guestTokenMiddleware);
 
-/**
- * ✅ GET /arts/products
- * Supports:
- * - category (string)
- * - title (partial match)
- * - available (true | false)
- * - min, max (price range)
- * - sort (best-selling | low-to-high | high-to-low | newest)
- * - pagination (page, limit)
- * - type (string)
- *
- * Example:
- * /arts/products?category=Painting&title=classic&available=true&min=1000&max=6000&sort=low-to-high&page=1&limit=10
- */
-// ✅ Search suggestions API — LIKE search anywhere in title
+/* ============================
+   🔍 SEARCH SUGGESTIONS (Public)
+============================ */
 router.get("/suggestions", async (req, res) => {
   try {
     const { search } = req.query;
 
-    // ❌ Require minimum input length for performance
     if (!search || search.trim().length < 2) {
       return res.status(400).json({
         status: 400,
@@ -33,37 +21,26 @@ router.get("/suggestions", async (req, res) => {
       });
     }
 
-    // 🔍 LIKE search (anywhere in title, case-insensitive)
     const regex = new RegExp(search.trim(), "i");
 
-    // 🧠 Find top 5 products matching anywhere in title
     const suggestions = await Product.find(
-      { title: { $regex: regex } },
+      { title: { $regex: regex }, isDeleted: false },
       { productId: 1, title: 1, category: 1, _id: 0 }
-    ).sort({ title: 1 });
-
-    if (!suggestions.length) {
-      return res.status(200).json({
-        data: {
-          status: 204,
-          message: "No matching products found.",
-          data: [],
-          count: 0,
-        },
-      });
-    }
+    )
+      .sort({ title: 1 })
+      .lean();
 
     return res.status(200).json({
       data: {
-        data: {
-          status: 200,
-          count: suggestions.length,
-          data: suggestions,
-          message: "Suggestions fetched successfully.",
-        },
+        status: suggestions.length ? 200 : 204,
+        count: suggestions.length,
+        data: suggestions,
+        message: suggestions.length
+          ? "Suggestions fetched successfully."
+          : "No matching products found.",
       },
     });
-  } catch (err) {
+  } catch {
     return res.status(500).json({
       status: 500,
       message: "Server error while fetching suggestions.",
@@ -71,13 +48,16 @@ router.get("/suggestions", async (req, res) => {
   }
 });
 
+/* ============================
+   📦 GET ALL PRODUCTS (Public)
+============================ */
 router.get("/", async (req, res) => {
   try {
     const {
       category,
       title,
-      available,
       type,
+      available,
       min,
       max,
       sort,
@@ -85,96 +65,60 @@ router.get("/", async (req, res) => {
       limit,
     } = req.query;
 
-    const filter = {};
+    const filter = { isDeleted: false };
 
-    // 🎨 Category filter (supports single or multiple)
     if (category) {
-      const categories = Array.isArray(category)
-        ? category
-        : category.split(",");
       filter.category = {
-        $in: categories.map((c) => new RegExp(`^${c}$`, "i")),
+        $in: category.split(",").map((c) => new RegExp(`^${c}$`, "i")),
       };
     }
 
-    // 🔤 Title filter (case-insensitive search)
-    if (title) {
-      filter.title = { $regex: title, $options: "i" };
-    }
+    if (title) filter.title = { $regex: title, $options: "i" };
 
-    // 🎨 Type filter (supports single or multiple)
     if (type) {
-      const types = Array.isArray(type) ? type : type.split(",");
       filter.type = {
-        $in: types.map((t) => new RegExp(`^${t}$`, "i")),
+        $in: type.split(",").map((t) => new RegExp(`^${t}$`, "i")),
       };
     }
 
-    // 💰 Price range filter
-    if (min && max) {
-      filter.price = { $gte: Number(min), $lte: Number(max) };
-    }
+    if (min && max) filter.price = { $gte: +min, $lte: +max };
+    if (available !== undefined) filter.isAvailable = available === "true";
 
-    // 🟢 Availability filter
-    if (available !== undefined) {
-      filter.isAvailable = available === "true";
-    }
+    let query = Product.find(filter).lean();
 
-    // 🧭 Sorting logic
-    let query = Product.find(filter);
+    if (sort === "best-selling") query.where("mostSeller").equals(true);
+    if (sort === "low-to-high") query.sort({ price: 1 });
+    if (sort === "high-to-low") query.sort({ price: -1 });
+    if (sort === "newest") query.sort({ createdAt: -1 });
+    if (!sort) query.sort({ productId: 1 });
 
-    // 🧭 Sorting logic
-    if (sort) {
-      switch (sort) {
-        case "best-selling":
-          query = query.where("mostSeller").equals(true);
-          break;
-        case "low-to-high":
-          query = query.sort({ price: 1 });
-          break;
-        case "high-to-low":
-          query = query.sort({ price: -1 });
-          break;
-        case "newest":
-          query = query.sort({ createdAt: -1 });
-          break;
-        default:
-          break;
-      }
-    } else {
-      // Default sort — to maintain consistent ordering
-      query = query.sort({ productId: 1 });
-    }
-
-    // 🔢 Total count for frontend
-    const totalCount = await Product.countDocuments(filter);
-
-    // 📄 Optional pagination
     if (limit) {
       const skip = (Number(page) - 1) * Number(limit);
       query = query.skip(skip).limit(Number(limit));
     }
 
-    const products = await query;
-
-    const pagination = {
-      totalItems: totalCount,
-      currentPage: Number(page),
-      pageSize: limit ? Number(limit) : totalCount,
-      totalPages: limit ? Math.ceil(totalCount / Number(limit)) : 1,
-    };
+    const [products, total] = await Promise.all([
+      query,
+      Product.countDocuments(filter),
+    ]);
 
     return res.status(200).json({
       data: {
-        status: 200,
-        guestToken: req.guestToken,
-        pagination,
+        status: products.length ? 200 : 204,
+        count: total,
         data: products,
-        message: "Products fetched successfully",
+        message: products.length
+          ? "Products fetched successfully"
+          : "No products found",
+      },
+      pagination: {
+        totalItems: total,
+        currentPage: +page,
+        pageSize: +limit,
+        totalPages: Math.ceil(total / limit),
       },
     });
-  } catch (err) {
-    console.error("Error fetching products:", err);
+  } catch {
     return res.status(500).json({
       status: 500,
       message: "Server error while fetching products",
@@ -182,17 +126,19 @@ router.get("/", async (req, res) => {
   }
 });
 
-// ✅ Get a single product by ID
+/* ============================
+   📄 GET PRODUCT BY ID
+============================ */
 router.get("/:id", async (req, res) => {
   try {
-    const product = await Product.findOne({ productId: req.params.id });
+    const product = await Product.findOne({
+      productId: req.params.id,
+      isDeleted: false,
+    }).lean();
 
     if (!product) {
       return res.status(404).json({
-        data: {
-          status: 404,
-          message: "Product not found",
-        },
+        data: { status: 404, message: "Product not found", data: [] },
       });
     }
 
@@ -203,120 +149,121 @@ router.get("/:id", async (req, res) => {
         message: "Product fetched successfully",
       },
     });
-  } catch (err) {
+  } catch {
     return res.status(500).json({
       status: 500,
-      message: "Server error",
+      message: "Server error while fetching product",
     });
   }
 });
 
-// Allowed categories
-const allowedCategories = ["resin", "painting", "home decor", "crafts"];
-
-// 📌 Utility to validate URL
-const isValidUrl = (url) => {
-  try {
-    new URL(url);
-    return true;
-  } catch {
-    return false;
-  }
-};
-
+/* ============================
+   ➕ ADD PRODUCT (ADMIN)
+============================ */
 router.post(
   "/addProducts",
+  adminAuth,
   [
-    // Required fields
-    body("title").notEmpty().withMessage("Title is required"),
-    body("price").isNumeric().withMessage("Price must be a number"),
-    body("category")
-      .notEmpty()
-      .withMessage("Category is required")
-      .isIn(allowedCategories)
-      .withMessage("Invalid category"),
-
-    // Optional but validated fields
+    body("title").notEmpty(),
+    body("price").isFloat({ gt: 0 }),
+    body("category").notEmpty(),
+    body("type").notEmpty(),
+    body("materialsAndProcess").isArray({ min: 1 }),
     body("image")
       .optional()
       .custom((value) => {
-        if (value && !isValidUrl(value)) throw new Error("Invalid image URL");
-        return true;
+        try {
+          new URL(value);
+          return true;
+        } catch {
+          throw new Error("Invalid image URL");
+        }
       }),
 
-    // details should be array of strings
-    body("details")
-      .isArray({ min: 1 })
-      .withMessage("details must be a non-empty array"),
-    body("details.*").isString().withMessage("Each detail must be a string"),
+    /* 🎨 CUSTOMIZATION VALIDATION */
+    body("customizationOptions").optional().isArray(),
 
-    // customized_options validation
-    body("customized_options").optional().isArray(),
-    body("customized_options.*.option")
-      .if(body("customized_options").exists())
-      .notEmpty()
-      .withMessage("customized_options.option is required"),
-    body("customized_options.*.values")
-      .if(body("customized_options").exists())
-      .isArray({ min: 1 })
-      .withMessage("customized_options.values must be a non-empty array"),
-    body("customized_options.*.values.*")
-      .if(body("customized_options").exists())
-      .isString()
-      .withMessage("customized_options value must be a string"),
+    body("customizationOptions.*.key").optional().trim().notEmpty(),
 
-    // Booleans
-    body("customizationAllowed").optional().isBoolean(),
+    body("customizationOptions.*.label").optional().trim().notEmpty(),
+
+    body("customizationOptions.*.type")
+      .optional()
+      .isIn(["select", "text", "number", "boolean"]),
+
+    body("customizationOptions.*.required").optional().isBoolean(),
+
+    body("customizationOptions.*.options").optional().isArray(),
+
+    body("customizationOptions.*.options.*.label").optional().notEmpty(),
+
+    body("customizationOptions.*.options.*.value").optional().notEmpty(),
+
+    body("customizationOptions.*.options.*.priceDelta").optional().isFloat(),
+
+    body("customizationOptions.*.priceDelta").optional().isFloat(),
+
     body("isSale").optional().isBoolean(),
+
+    body("saleDiscount")
+      .if(body("isSale").equals("true"))
+      .isInt({ min: 1, max: 99 })
+      .withMessage("saleDiscount must be between 1 and 99"),
+
+    body("saleDiscount")
+      .if(body("isSale").not().equals("true"))
+      .custom((val) => val === undefined || val === 0)
+      .withMessage("saleDiscount must be 0 when isSale is false"),
     body("isLatest").optional().isBoolean(),
     body("mostSeller").optional().isBoolean(),
     body("isAvailable").optional().isBoolean(),
-
-    // saleDiscount
-    body("saleDiscount")
-      .optional()
-      .isNumeric()
-      .withMessage("saleDiscount must be a number"),
   ],
+
   async (req, res) => {
     try {
       const errors = validationResult(req);
-
-      // ❌ If any field invalid → return all errors
       if (!errors.isEmpty()) {
         return res.status(400).json({
-          success: false,
-          errors: errors.array(),
+          data: {
+            status: 400,
+            message: "Validation failed",
+            errors: errors.array(),
+          },
         });
       }
 
-      // ❌ Prevent duplicate title
-      const existingProduct = await Product.findOne({
-        title: req.body.title,
+      const exists = await Product.findOne({
+        title: new RegExp(`^${req.body.title}$`, "i"),
+        isDeleted: false,
       });
 
-      if (existingProduct) {
+      if (exists) {
         return res.status(400).json({
-          success: false,
-          message: "A product with this title already exists",
+          data: { status: 400, message: "Product title already exists" },
         });
       }
 
-      // Create product
-      const product = new Product(req.body);
+      const { customizationOptions = [], ...safeBody } = req.body;
+
+      safeBody.customizationAllowed = customizationOptions.length > 0;
+      safeBody.customizationOptions = customizationOptions;
+      safeBody.isDeleted = false;
+
+      const product = new Product(safeBody);
       await product.save();
 
-      res.status(201).json({
-        success: true,
-        message: "Product added successfully",
-        product,
+      return res.status(201).json({
+        data: {
+          status: 201,
+          message: "Product added successfully",
+          data: product,
+        },
       });
-    } catch (error) {
-      console.error("Add product error:", error);
-
-      res.status(500).json({
-        success: false,
-        message: "Server Error",
+    } catch (err) {
+      console.error(err);
+      return res.status(500).json({
+        status: 500,
+        message: "Server error while adding product",
       });
     }
   }
