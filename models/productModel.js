@@ -27,7 +27,7 @@ const customizationOptionSchema = new mongoose.Schema(
     /* 🧩 Input Type */
     type: {
       type: String,
-      enum: ["select", "text", "number", "boolean"],
+      enum: ["select", "text", "boolean"],
       required: true,
     },
 
@@ -53,7 +53,7 @@ const customizationOptionSchema = new mongoose.Schema(
       },
     ],
 
-    /* 💰 For text / number / boolean */
+    /* 💰 For text / boolean */
     priceDelta: {
       type: Number,
       default: 0,
