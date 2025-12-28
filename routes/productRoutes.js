@@ -189,7 +189,7 @@ router.post(
 
     body("customizationOptions.*.type")
       .optional()
-      .isIn(["select", "text", "number", "boolean"]),
+      .isIn(["select", "text", "boolean"]),
 
     body("customizationOptions.*.required").optional().isBoolean(),
 
