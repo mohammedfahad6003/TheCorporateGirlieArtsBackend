@@ -189,7 +189,7 @@ router.post(
 
     body("customizationOptions.*.type")
       .optional()
-      .isIn(["select", "text", "number", "boolean"]),
+      .isIn(["select", "text", "boolean"]),
 
     body("customizationOptions.*.required").optional().isBoolean(),
 
@@ -268,5 +268,55 @@ router.post(
     }
   }
 );
+
+/* ============================
+   🗑️ SOFT DELETE PRODUCT (ADMIN)
+============================ */
+router.patch("/deleteProducts/:productId", adminAuth, async (req, res) => {
+  try {
+    const { productId } = req.params;
+
+    const product = await Product.findOne({ productId });
+
+    if (!product) {
+      return res.status(404).json({
+        data: {
+          status: 404,
+          message: "Product not found",
+        },
+      });
+    }
+
+    if (product.isDeleted) {
+      return res.status(400).json({
+        data: {
+          status: 400,
+          message: "Product already deleted",
+        },
+      });
+    }
+
+    product.isDeleted = true;
+    await product.save();
+
+    return res.status(200).json({
+      data: {
+        status: 200,
+        message: "Product deleted successfully",
+        data: {
+          productId: product.productId,
+          title: product.title,
+          isDeleted: product.isDeleted,
+        },
+      },
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      status: 500,
+      message: "Server error while deleting product",
+    });
+  }
+});
 
 module.exports = router;
